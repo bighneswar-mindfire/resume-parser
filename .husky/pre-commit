@@ -1,0 +1,9 @@
+npx lint-staged
+
+# Scan staged changes for secrets when gitleaks is installed locally.
+# CI always runs gitleaks, so this local pass is best-effort.
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --staged --no-banner --redact
+else
+  echo "gitleaks not installed locally — skipping local secret scan (CI still enforces it)."
+fi

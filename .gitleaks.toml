@@ -1,0 +1,12 @@
+# Gitleaks configuration.
+# Extends the bundled default ruleset (covers common cloud/API/token formats).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  '''package-lock.json''',
+  '''(.*?)\.example$''',
+  '''\.env\.example''',
+]
