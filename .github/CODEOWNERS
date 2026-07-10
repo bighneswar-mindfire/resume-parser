@@ -1,3 +1,5 @@
-# owner
+# CODEOWNERS — required reviewers for pull requests.
+# Enable "Require review from Code Owners" in branch protection to enforce this.
 
--      @bighneswar-mindfire
+# Default owner for everything in the repo.
+*      @bighneswar-mindfire

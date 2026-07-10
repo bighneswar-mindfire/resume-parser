@@ -45,10 +45,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so gitleaks can scan the whole range on push.
+          # Full history so gitleaks scans every commit, including the root.
           fetch-depth: 0
 
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      # Run the gitleaks CLI directly instead of gitleaks-action. The action
+      # scans the commit range firstCommit^..lastCommit, which fails on the
+      # initial push because the root commit has no parent (firstCommit^).
+      # `gitleaks git` scans the entire history and handles the root commit.
+      - name: Install gitleaks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_VERSION: 8.24.3
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          sudo install /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Scan git history for secrets
+        run: gitleaks git . --config .gitleaks.toml --redact --verbose --no-banner
