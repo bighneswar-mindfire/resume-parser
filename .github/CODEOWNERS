@@ -1,11 +1,3 @@
-# CODEOWNERS — required reviewers for pull requests.
-# Replace @OWNER with your GitHub username or team (e.g. @your-org/maintainers).
-# Enable "Require review from Code Owners" in branch protection for this to be enforced.
+# owner
 
-# Default owner for everything in the repo.
-*                   @OWNER
-
-# Scoped ownership examples — uncomment / adjust as the team grows.
-# /frontend/         @OWNER @frontend-team
-# /backend/          @OWNER @backend-team
-# /.github/          @OWNER
+-      @bighneswar-mindfire
