@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel superseded runs on the same ref.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -45,13 +44,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Full history so gitleaks scans every commit, including the root.
           fetch-depth: 0
 
-      # Run the gitleaks CLI directly instead of gitleaks-action. The action
-      # scans the commit range firstCommit^..lastCommit, which fails on the
-      # initial push because the root commit has no parent (firstCommit^).
-      # `gitleaks git` scans the entire history and handles the root commit.
       - name: Install gitleaks
         env:
           GITLEAKS_VERSION: 8.24.3
