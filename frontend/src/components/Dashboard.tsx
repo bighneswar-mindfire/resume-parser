@@ -14,7 +14,6 @@ export default function UploadDashboard() {
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
-  // Filter allowed files
   const validateFile = (file: File): boolean => {
     const allowedExtensions = ['.pdf', '.docx', '.png', '.jpg', '.jpeg'];
     const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
@@ -39,7 +38,6 @@ export default function UploadDashboard() {
     setFileList((prev) => [...prev, ...newFiles]);
   };
 
-  // Drag and drop handlers
   const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
@@ -95,7 +93,6 @@ export default function UploadDashboard() {
         prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'success' } : f))
       );
     } catch (error: unknown) {
-      // Narrowing 'unknown' to standard Error to extract the message safely [2]
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
 
       setFileList((prev) =>
@@ -104,7 +101,6 @@ export default function UploadDashboard() {
     }
   };
 
-  // Helper styles for status badges
   const statusStyles = {
     pending: 'bg-gray-100 text-gray-700 border-gray-200',
     uploading: 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse',
@@ -119,7 +115,7 @@ export default function UploadDashboard() {
         Upload multiple resumes (PDF, DOCX, JPEG, PNG)
       </p>
 
-      {/* Drag & Drop Area */}
+      {/* drag drop area */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -146,7 +142,7 @@ export default function UploadDashboard() {
         />
       </div>
 
-      {/* Selected File List */}
+      {/* selected file list */}
       {fileList.length > 0 && (
         <div className="mt-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -187,7 +183,6 @@ export default function UploadDashboard() {
             ))}
           </ul>
 
-          {/* Action Button */}
           {fileList.some((f) => f.status === 'pending') && (
             <button
               onClick={uploadFiles}

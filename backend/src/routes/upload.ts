@@ -1,21 +1,14 @@
 import express, { Request, Response, NextFunction, Router } from 'express';
 import multer from 'multer';
 import upload from '../config/multer.js';
+import { Resume } from '../models/Resume.js';
 
 const router: Router = express.Router();
-
-interface UploadedFileResponse {
-  originalName: string;
-  fileName: string;
-  path: string;
-  mimetype: string;
-  size: number;
-}
 
 router.post(
   '/upload',
   upload.array('resumes', 10),
-  (req: Request, res: Response): Response | void => {
+  async (req: Request, res: Response): Promise<Response | void> => {
     try {
       const files = req.files as Express.Multer.File[] | undefined;
 
@@ -23,20 +16,28 @@ router.post(
         return res.status(400).json({ error: 'Please upload at least one file.' });
       }
 
-      const uploadedFiles: UploadedFileResponse[] = files.map((file) => ({
-        originalName: file.originalname,
-        fileName: file.filename,
-        path: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
-      }));
+      const savedResumes = [];
+
+      for (const file of files) {
+        const newResume = new Resume({
+          fileName: file.originalname,
+          filePath: file.path,
+          status: 'PENDING',
+        });
+
+        const savedDoc = await newResume.save();
+        savedResumes.push(savedDoc);
+      }
 
       return res.status(200).json({
-        message: 'Files uploaded successfully.',
-        files: uploadedFiles,
+        message: 'Files uploaded and saved to database successfully.',
+        data: savedResumes,
       });
-    } catch {
-      return res.status(500).json({ error: 'Server error during file upload.' });
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      return res
+        .status(500)
+        .json({ error: 'Server error during database insertion.', details: errorMessage });
     }
   }
 );

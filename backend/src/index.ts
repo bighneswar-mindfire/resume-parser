@@ -1,12 +1,17 @@
 import express, { Request, Response } from 'express';
+import dotenv from 'dotenv';
+import { connectDB } from './config/db.js';
 import uploadRouter from './routes/upload.js';
+
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 
-// Routes
+connectDB();
+
 app.use('/api', uploadRouter);
 
 app.get('/health', (req: Request, res: Response) => {
