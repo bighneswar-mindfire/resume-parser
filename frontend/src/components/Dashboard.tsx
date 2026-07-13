@@ -1,111 +1,203 @@
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Legend,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
 
-interface DailyCount {
-  day: string;
-  parsed: number;
-  failed: number;
+interface FileItem {
+  id: string;
+  file: File;
+  status: 'pending' | 'uploading' | 'success' | 'error';
+  errorMessage?: string;
 }
 
-interface StatusSlice {
-  name: string;
-  value: number;
-}
+export default function UploadDashboard() {
+  const [fileList, setFileList] = useState<FileItem[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-const DAILY_COUNTS: DailyCount[] = [
-  { day: 'Mon', parsed: 42, failed: 3 },
-  { day: 'Tue', parsed: 58, failed: 5 },
-  { day: 'Wed', parsed: 71, failed: 2 },
-  { day: 'Thu', parsed: 64, failed: 6 },
-  { day: 'Fri', parsed: 90, failed: 4 },
-  { day: 'Sat', parsed: 33, failed: 1 },
-  { day: 'Sun', parsed: 21, failed: 0 },
-];
+  const generateId = () => Math.random().toString(36).substring(2, 9);
 
-const STATUS_BREAKDOWN: StatusSlice[] = [
-  { name: 'Completed', value: 379 },
-  { name: 'Queued', value: 24 },
-  { name: 'Failed', value: 21 },
-];
+  // Filter allowed files
+  const validateFile = (file: File): boolean => {
+    const allowedExtensions = ['.pdf', '.docx', '.png', '.jpg', '.jpeg'];
+    const fileExtension = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+    return allowedExtensions.includes(fileExtension);
+  };
 
-const STATUS_COLORS = ['#2f9e44', '#f59f00', '#e03131'];
+  const handleFilesAdded = (files: FileList) => {
+    const newFiles: FileItem[] = [];
 
-export function Dashboard() {
-  const totalParsed = DAILY_COUNTS.reduce((sum, d) => sum + d.parsed, 0);
-  const totalFailed = DAILY_COUNTS.reduce((sum, d) => sum + d.failed, 0);
+    Array.from(files).forEach((file) => {
+      if (validateFile(file)) {
+        newFiles.push({
+          id: generateId(),
+          file,
+          status: 'pending',
+        });
+      } else {
+        alert(`File "${file.name}" is not supported. Please upload PDF, DOCX, or Images.`);
+      }
+    });
+
+    setFileList((prev) => [...prev, ...newFiles]);
+  };
+
+  // Drag and drop handlers
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files) {
+      handleFilesAdded(e.dataTransfer.files);
+    }
+  };
+
+  const handleFileSelect = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      handleFilesAdded(e.target.files);
+    }
+  };
+
+  const removeFile = (id: string) => {
+    setFileList((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const uploadFiles = async () => {
+    const pendingFiles = fileList.filter((f) => f.status === 'pending');
+    if (pendingFiles.length === 0) return;
+
+    setFileList((prev) =>
+      prev.map((f) => (f.status === 'pending' ? { ...f, status: 'uploading' } : f))
+    );
+
+    const formData = new FormData();
+    pendingFiles.forEach((fileItem) => {
+      formData.append('resumes', fileItem.file);
+    });
+
+    try {
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = (await response.json()) as { error?: string };
+        throw new Error(errorData.error || 'Failed to upload files.');
+      }
+
+      setFileList((prev) =>
+        prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'success' } : f))
+      );
+    } catch (error: unknown) {
+      // Narrowing 'unknown' to standard Error to extract the message safely [2]
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+
+      setFileList((prev) =>
+        prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'error', errorMessage } : f))
+      );
+    }
+  };
+
+  // Helper styles for status badges
+  const statusStyles = {
+    pending: 'bg-gray-100 text-gray-700 border-gray-200',
+    uploading: 'bg-blue-50 text-blue-700 border-blue-200 animate-pulse',
+    success: 'bg-green-50 text-green-700 border-green-200',
+    error: 'bg-red-50 text-red-700 border-red-200',
+  };
 
   return (
-    <div className="dashboard">
-      <section className="stat-row">
-        <StatCard label="Parsed this week" value={totalParsed} />
-        <StatCard label="Failed this week" value={totalFailed} />
-        <StatCard label="In queue" value={STATUS_BREAKDOWN[1]?.value ?? 0} />
-      </section>
+    <div className="max-w-2xl mx-auto my-10 p-6 bg-white rounded-xl shadow-md border border-gray-100">
+      <h2 className="text-2xl font-bold text-gray-900">Resume Upload Dashboard</h2>
+      <p className="text-sm text-gray-500 mt-1 mb-6">
+        Upload multiple resumes (PDF, DOCX, JPEG, PNG)
+      </p>
 
-      <section className="chart-grid">
-        <div className="chart-card">
-          <h2>per day</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={DAILY_COUNTS}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="parsed" name="Parsed" fill="#4263eb" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="failed" name="Failed" fill="#e03131" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      {/* Drag & Drop Area */}
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        onClick={() => fileInputRef.current?.click()}
+        className={`border-2 border-dashed rounded-lg p-10 text-center cursor-pointer transition-colors duration-200 flex flex-col items-center justify-center ${
+          isDragging
+            ? 'border-indigo-500 bg-indigo-50'
+            : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+        }`}
+      >
+        <span className="text-4xl mb-3">📁</span>
+        <p className="text-gray-700 font-medium">
+          Drag & drop your files here, or <span className="text-indigo-600 underline">browse</span>
+        </p>
+        <span className="text-xs text-gray-500 mt-1">Max file size: 10MB</span>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          className="hidden"
+          multiple
+          accept=".pdf,.docx,.png,.jpg,.jpeg"
+        />
+      </div>
 
-        <div className="chart-card">
-          <h2>breakdown</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={STATUS_BREAKDOWN}
-                dataKey="value"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={90}
-                label
+      {/* Selected File List */}
+      {fileList.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Selected Files ({fileList.length})
+          </h3>
+          <ul className="space-y-3">
+            {fileList.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-center justify-between p-4 border border-gray-200 rounded-lg bg-gray-50 shadow-sm"
               >
-                {STATUS_BREAKDOWN.map((slice, index) => (
-                  <Cell key={slice.name} fill={STATUS_COLORS[index % STATUS_COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+                <div className="flex-1 min-w-0 pr-4">
+                  <div className="text-sm font-semibold text-gray-900 truncate">
+                    {item.file.name}
+                  </div>
+                  <div className="flex items-center text-xs text-gray-500 mt-1 space-x-2">
+                    <span>{(item.file.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    <span>•</span>
+                    <span
+                      className={`px-2 py-0.5 border rounded-full text-[10px] font-bold ${statusStyles[item.status]}`}
+                    >
+                      {item.status.toUpperCase()}
+                    </span>
+                  </div>
+                  {item.errorMessage && (
+                    <div className="text-xs text-red-600 mt-1 font-medium">{item.errorMessage}</div>
+                  )}
+                </div>
+                {item.status === 'pending' && (
+                  <button
+                    onClick={() => removeFile(item.id)}
+                    className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          {/* Action Button */}
+          {fileList.some((f) => f.status === 'pending') && (
+            <button
+              onClick={uploadFiles}
+              className="w-full mt-6 py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-colors focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+              Start Parsing Files
+            </button>
+          )}
         </div>
-      </section>
-    </div>
-  );
-}
-
-interface StatCardProps {
-  label: string;
-  value: number;
-}
-
-function StatCard({ label, value }: StatCardProps) {
-  return (
-    <div className="stat-card">
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
+      )}
     </div>
   );
 }
