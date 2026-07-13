@@ -2,9 +2,19 @@ import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
 
 interface FileItem {
   id: string;
+  dbId?: string;
   file: File;
   status: 'pending' | 'uploading' | 'success' | 'error';
   errorMessage?: string;
+}
+
+interface BackendResponse {
+  message: string;
+  data: Array<{
+    _id: string;
+    fileName: string;
+    status: string;
+  }>;
 }
 
 export default function UploadDashboard() {
@@ -89,8 +99,20 @@ export default function UploadDashboard() {
         throw new Error(errorData.error || 'Failed to upload files.');
       }
 
+      const responseData = (await response.json()) as BackendResponse;
+
       setFileList((prev) =>
-        prev.map((f) => (f.status === 'uploading' ? { ...f, status: 'success' } : f))
+        prev.map((f) => {
+          if (f.status === 'uploading') {
+            const dbRecord = responseData.data.find((doc) => doc.fileName === f.file.name);
+            return {
+              ...f,
+              status: 'success',
+              dbId: dbRecord?._id, // Assign Atlas generated ID
+            };
+          }
+          return f;
+        })
       );
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
@@ -115,7 +137,7 @@ export default function UploadDashboard() {
         Upload multiple resumes (PDF, DOCX, JPEG, PNG)
       </p>
 
-      {/* drag drop area */}
+      {/* Drag drop area */}
       <div
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -142,7 +164,7 @@ export default function UploadDashboard() {
         />
       </div>
 
-      {/* selected file list */}
+      {/* Selected file list */}
       {fileList.length > 0 && (
         <div className="mt-8">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">
@@ -158,7 +180,7 @@ export default function UploadDashboard() {
                   <div className="text-sm font-semibold text-gray-900 truncate">
                     {item.file.name}
                   </div>
-                  <div className="flex items-center text-xs text-gray-500 mt-1 space-x-2">
+                  <div className="flex flex-wrap items-center text-xs text-gray-500 mt-1 gap-2">
                     <span>{(item.file.size / (1024 * 1024)).toFixed(2)} MB</span>
                     <span>•</span>
                     <span
@@ -166,6 +188,14 @@ export default function UploadDashboard() {
                     >
                       {item.status.toUpperCase()}
                     </span>
+                    {item.dbId && (
+                      <>
+                        <span>•</span>
+                        <span className="px-2 py-0.5 border border-indigo-100 bg-indigo-50 text-indigo-700 text-[9px] font-mono rounded">
+                          Doc ID: {item.dbId}
+                        </span>
+                      </>
+                    )}
                   </div>
                   {item.errorMessage && (
                     <div className="text-xs text-red-600 mt-1 font-medium">{item.errorMessage}</div>
