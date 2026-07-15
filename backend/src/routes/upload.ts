@@ -17,10 +17,9 @@ router.post(
         return res.status(400).json({ error: 'Please upload at least one file.' });
       }
 
-      const queuedJobs = [];
+      const savedResumes = [];
 
       for (const file of files) {
-        // Step A: Immediate Database Save with PENDING status
         const placeholderResume = new Resume({
           fileName: file.originalname,
           filePath: file.path,
@@ -36,16 +35,12 @@ router.post(
           originalName: file.originalname,
         });
 
-        queuedJobs.push({
-          id: savedDoc._id,
-          fileName: savedDoc.fileName,
-          status: savedDoc.status,
-        });
+        savedResumes.push(savedDoc);
       }
 
       return res.status(202).json({
         message: 'Resumes successfully uploaded and queued for processing.',
-        jobs: queuedJobs,
+        data: savedResumes,
       });
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';

@@ -66,10 +66,26 @@ const SKILLS_DICTIONARY = [
 
 const SECTION_HEADERS = {
   experience:
-    /professional\s+experience|work\s+experience|experience|employment\s+history|history/i,
-  education: /education|academic\s+background|academic\s+history/i,
-  skills: /skills|technical\s+skills|technologies|proficiencies|expertise/i,
-  summary: /summary|professional\s+summary|profile|about\s+me/i,
+    /^(?:professional\s+|work\s+|relevant\s+)?experience\b|^employment(?:\s+history)?\b|^work\s+history\b/i,
+  education: /^education\b|^academic\s+(?:background|history|qualifications?)\b/i,
+  skills:
+    /^(?:technical\s+|key\s+|core\s+)?skills\b|^(?:technologies|proficiencies|expertise)\b|^tech(?:nical)?\s+stack\b/i,
+  summary: /^(?:professional\s+|career\s+)?summary\b|^profile\b|^about(?:\s+me)?\b|^objective\b/i,
+};
+
+const MONTH_INDEX: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
 };
 
 export class NlpParserService {
@@ -85,7 +101,7 @@ export class NlpParserService {
     const email = this.extractEmail(normalizedText);
     const phone = this.extractPhone(normalizedText);
 
-    const name = this.extractName(doc, sections.header || normalizedText);
+    const name = this.extractName(doc, sections.header || normalizedText, email);
     const skills = this.extractSkills(sections.skills || normalizedText);
     const experience = this.calculateExperience(sections.experience || normalizedText);
     const education = this.extractEducation(sections.education || normalizedText);
@@ -105,12 +121,25 @@ export class NlpParserService {
       const trimmedLine = line.trim();
       if (!trimmedLine) return;
 
+      // Strip decoration (===, ---, ***, ###) so "===== SKILLS =====" still matches
+      const undecorated = trimmedLine.replace(/^[=\-*#_~\s]+|[=\-*#_~\s]+$/g, '');
+
       let matchedHeader = false;
       for (const [key, pattern] of Object.entries(SECTION_HEADERS)) {
-        if (pattern.test(trimmedLine) && trimmedLine.length < 30) {
+        if (pattern.test(undecorated) && undecorated.length < 40) {
           currentSection = key;
-          sections[currentSection] = [];
+          const headerSection = sections[currentSection] || [];
+          sections[currentSection] = headerSection;
           matchedHeader = true;
+
+          // Inline header like "Skills: java, sql" — keep the content after the colon
+          const colonIndex = undecorated.indexOf(':');
+          if (colonIndex !== -1) {
+            const inlineContent = undecorated.slice(colonIndex + 1).trim();
+            if (inlineContent) {
+              headerSection.push(inlineContent);
+            }
+          }
           break;
         }
       }
@@ -135,13 +164,29 @@ export class NlpParserService {
   }
 
   //name extract
-  private static extractName(doc: ReturnType<typeof nlp>, headerText: string): string | null {
+  private static extractName(
+    doc: ReturnType<typeof nlp>,
+    headerText: string,
+    email: string | null
+  ): string | null {
     const lines = headerText
       .split('\n')
-      .map((l) => l.trim())
+      // Two-column layouts glue the right column on after a tab — keep the left cell only
+      .map((l) => (l.split('\t')[0] || '').trim())
+      // A section header word that leaked onto the name line ("Rahul Verma Skills") is not part of the name
+      .map((l) =>
+        l
+          .replace(
+            /\s+(?:skills?|experience|education|summary|profile|objective|projects?|contact)\s*$/i,
+            ''
+          )
+          .trim()
+      )
       .filter((l) => l.length > 0);
 
-    const candidateLines = lines.slice(0, 3);
+    const candidateLines = lines.slice(0, 4);
+    const candidates: string[] = [];
+
     for (const line of candidateLines) {
       const words = line.split(/\s+/);
       if (
@@ -151,7 +196,8 @@ export class NlpParserService {
         !line.includes('http') &&
         !line.includes('www') &&
         !/[0-9]/.test(line) &&
-        !/linkedin|leetcode|github|behance|portfolio|resume|cv|curriculum|email|phone|address|india|usa|odisha/i.test(
+        !/[,|:;()/]/.test(line) &&
+        !/linkedin|leetcode|github|behance|portfolio|resume|\bcv\b|curriculum|vitae|email|phone|mobile|address|engineer|developer|analyst|manager|consultant|architect|scientist|designer|intern\b/i.test(
           line
         )
       ) {
@@ -160,9 +206,26 @@ export class NlpParserService {
           return firstChar === firstChar.toUpperCase() && /[a-zA-Z]/.test(firstChar);
         });
         if (isCapitalized) {
-          return line;
+          candidates.push(line);
         }
       }
+    }
+
+    // Prefer the candidate whose words appear in the email local part — strong
+    // signal it's the person's name and not a title or stray location line
+    if (email && candidates.length > 0) {
+      const localPart = (email.split('@')[0] || '').toLowerCase();
+      const corroborated = candidates.find((c) =>
+        c
+          .toLowerCase()
+          .split(/\s+/)
+          .some((w) => w.length >= 3 && localPart.includes(w))
+      );
+      if (corroborated) return corroborated;
+    }
+
+    if (candidates.length > 0 && candidates[0]) {
+      return candidates[0];
     }
 
     const compromiseName = doc.people().first().text()?.trim();
@@ -238,31 +301,68 @@ export class NlpParserService {
       }
     }
 
-    const dateRangePattern =
-      /\b(19\d{2}|20\d{2})\b\s*[-–—to\s]+\s*\b(19\d{2}|20\d{2}|present|current)\b/gi;
-    let totalYears = 0;
+    // Month-aware date ranges: "Jun 2018 - Dec 2020", "January 2021 – Present", "2016 - 2019".
+    // Collected as [startMonthIndex, endMonthIndex) intervals then merged to avoid
+    // double-counting overlapping/concurrent roles.
+    const monthName = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
+    const dateRangePattern = new RegExp(
+      `\\b(?:(${monthName})[.,]?\\s+)?(19\\d{2}|20\\d{2})\\s*(?:[-–—~]|to|until)\\s*(?:(?:(${monthName})[.,]?\\s+)?(19\\d{2}|20\\d{2})|(present|current|now|till\\s+date))\\b`,
+      'gi'
+    );
+
+    const now = new Date();
+    const nowMonths = now.getFullYear() * 12 + now.getMonth();
+    const intervals: Array<[number, number]> = [];
     let match;
 
     while ((match = dateRangePattern.exec(experienceText)) !== null) {
-      const startYearStr = match[1];
-      const endYearStr = match[2];
+      const [, startMonthStr, startYearStr, endMonthStr, endYearStr, presentStr] = match;
+      if (!startYearStr) continue;
 
-      if (startYearStr) {
-        const startYear = parseInt(startYearStr, 10);
-        let endYear = new Date().getFullYear();
+      const startYear = parseInt(startYearStr, 10);
+      const startMonth = startMonthStr
+        ? (MONTH_INDEX[startMonthStr.slice(0, 3).toLowerCase()] ?? 0)
+        : 0;
+      const start = startYear * 12 + startMonth;
 
-        if (endYearStr && !/present|current/i.test(endYearStr)) {
-          const parsedEnd = parseInt(endYearStr, 10);
-          if (!isNaN(parsedEnd)) endYear = parsedEnd;
-        }
+      let end: number;
+      if (presentStr || !endYearStr) {
+        end = nowMonths;
+      } else {
+        const endYear = parseInt(endYearStr, 10);
+        // No end month given → assume end of that year so "2016 - 2019" counts 3 full years
+        const endMonth = endMonthStr
+          ? (MONTH_INDEX[endMonthStr.slice(0, 3).toLowerCase()] ?? 11)
+          : 11;
+        end = endYear * 12 + endMonth + 1;
+      }
 
-        const duration = endYear - startYear;
-        if (duration > 0 && duration < 15) {
-          totalYears += duration;
-        }
+      const durationMonths = end - start;
+      if (durationMonths > 0 && durationMonths < 15 * 12) {
+        intervals.push([start, Math.min(end, nowMonths)]);
       }
     }
 
+    if (intervals.length === 0) return 0;
+
+    // Merge overlapping intervals so concurrent roles aren't double-counted
+    intervals.sort((a, b) => a[0] - b[0]);
+    let totalMonths = 0;
+    let [curStart, curEnd] = intervals[0] as [number, number];
+
+    for (let i = 1; i < intervals.length; i++) {
+      const [nextStart, nextEnd] = intervals[i] as [number, number];
+      if (nextStart <= curEnd) {
+        curEnd = Math.max(curEnd, nextEnd);
+      } else {
+        totalMonths += curEnd - curStart;
+        curStart = nextStart;
+        curEnd = nextEnd;
+      }
+    }
+    totalMonths += curEnd - curStart;
+
+    const totalYears = Math.round(totalMonths / 12);
     return totalYears > 0 ? Math.min(totalYears, 40) : 0;
   }
 
@@ -278,47 +378,62 @@ export class NlpParserService {
       .filter((l) => l.length > 0);
 
     const degreePatterns = [
-      /B\.?S(?:c)?\.?\s*in/i,
-      /M\.?S(?:c)?\.?\s*in/i,
-      /Bachelor\s*(?:of)?/i,
-      /Master\s*(?:of)?/i,
-      /Ph\.?D\.?/i,
-      /B\.?Tech\.?/i,
-      /M\.?Tech\.?/i,
-      /Associate\s*(?:of)?/i,
-      /Degree/i,
+      /\bB\.?\s?Sc\.?\b/i,
+      /\bM\.?\s?Sc\.?\b/i,
+      /\bB\.?\s?S\.?(?:\s+in\b|\s*,|\s*$)/i,
+      /\bM\.?\s?S\.?(?:\s+in\b|\s*,|\s*$)/i,
+      /\bBachelor(?:'?s)?\b/i,
+      /\bMaster(?:'?s)?\b/i,
+      /\bPh\.?\s?D\.?\b/i,
+      /\bB\.?\s?Tech\b/i,
+      /\bM\.?\s?Tech\b/i,
+      /\bB\.?\s?E\.?(?:\s+in\b|\s*,|\s*$)/i,
+      /\bM\.?\s?E\.?(?:\s+in\b|\s*,|\s*$)/i,
+      /\bBCA\b/i,
+      /\bMCA\b/i,
+      /\bBBA\b/i,
+      /\bMBA\b/i,
+      /\bB\.?\s?Com\b/i,
+      /\bM\.?\s?Com\b/i,
+      /\bAssociate\s*(?:of|degree)\b/i,
+      /\bDiploma\b/i,
+      /\bDoctorate\b/i,
+      /\bDegree\b/i,
     ];
 
     let currentSchool: string | null = null;
     let currentDegree: string | null = null;
     let currentYear: number | null = null;
 
-    lines.forEach((line) => {
-      const hasSchoolKeyword = /university|college|institute|academy|school/i.test(line);
-
-      let matchedDegree: string | null = null;
-      for (const pattern of degreePatterns) {
-        if (pattern.test(line)) {
-          matchedDegree = line;
-          break;
-        }
-      }
-
-      if (hasSchoolKeyword && currentSchool) {
+    const flushEntry = () => {
+      if (currentSchool || currentDegree) {
         educationEntries.push({
-          school: currentSchool,
+          school: currentSchool || 'Mentioned Institution',
           degree: currentDegree || 'Degree Info',
           year: currentYear,
         });
+      }
+      currentSchool = null;
+      currentDegree = null;
+      currentYear = null;
+    };
 
-        currentSchool = null;
-        currentDegree = null;
-        currentYear = null;
+    lines.forEach((line) => {
+      const hasSchoolKeyword = /university|college|institute|academy|school|iit\b|nit\b/i.test(
+        line
+      );
+      const hasDegree = degreePatterns.some((pattern) => pattern.test(line));
+
+      // A new school or degree line while we already hold one of that kind → previous entry is complete
+      if ((hasSchoolKeyword && currentSchool) || (hasDegree && currentDegree)) {
+        flushEntry();
       }
 
+      // A single line can carry both, e.g. "B.Tech Computer Science, KIIT University, 2025"
       if (hasSchoolKeyword) {
         currentSchool = line;
-      } else if (matchedDegree) {
+      }
+      if (hasDegree) {
         currentDegree = line;
       }
 
@@ -338,19 +453,7 @@ export class NlpParserService {
       }
     });
 
-    if (currentSchool) {
-      educationEntries.push({
-        school: currentSchool,
-        degree: currentDegree || 'Degree Info',
-        year: currentYear,
-      });
-    } else if (currentDegree) {
-      educationEntries.push({
-        school: 'Mentioned Institution',
-        degree: currentDegree,
-        year: currentYear,
-      });
-    }
+    flushEntry();
 
     return educationEntries.slice(0, 3);
   }

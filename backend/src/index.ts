@@ -12,6 +12,9 @@ app.use(express.json());
 
 connectDB();
 
+import './workers/ocrWorker.js';
+import './workers/parserWorker.js';
+
 app.use('/api', uploadRouter);
 
 app.get('/health', (req: Request, res: Response) => {
