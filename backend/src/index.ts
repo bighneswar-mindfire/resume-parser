@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import uploadRouter from './routes/upload.js';
+import resumesRouter from './routes/resumes.js';
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ import './workers/ocrWorker.js';
 import './workers/parserWorker.js';
 
 app.use('/api', uploadRouter);
+app.use('/api', resumesRouter);
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK' });

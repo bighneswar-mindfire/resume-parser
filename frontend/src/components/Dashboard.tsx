@@ -17,7 +17,11 @@ interface BackendResponse {
   }>;
 }
 
-export default function UploadDashboard() {
+interface UploadDashboardProps {
+  onUploadComplete?: () => void;
+}
+
+export default function UploadDashboard({ onUploadComplete }: UploadDashboardProps) {
   const [fileList, setFileList] = useState<FileItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -114,6 +118,8 @@ export default function UploadDashboard() {
           return f;
         })
       );
+
+      onUploadComplete?.();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
 

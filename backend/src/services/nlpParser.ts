@@ -103,7 +103,10 @@ export class NlpParserService {
 
     const name = this.extractName(doc, sections.header || normalizedText, email);
     const skills = this.extractSkills(sections.skills || normalizedText);
-    const experience = this.calculateExperience(sections.experience || normalizedText);
+    const experience = this.calculateExperience(
+      sections.experience || normalizedText,
+      normalizedText
+    );
     const education = this.extractEducation(sections.education || normalizedText);
 
     return { name, email, phone, skills, experience, education };
@@ -112,7 +115,7 @@ export class NlpParserService {
   private static partitionSections(text: string): { [key: string]: string } {
     const lines = text.split('\n');
     const sections: { [key: string]: string[] } = {
-      header: [], // Holds top portion containing name/contact info before any section headers
+      header: [],
     };
 
     let currentSection = 'header';
@@ -121,7 +124,7 @@ export class NlpParserService {
       const trimmedLine = line.trim();
       if (!trimmedLine) return;
 
-      // Strip decoration (===, ---, ***, ###) so "===== SKILLS =====" still matches
+      // Strip decorations
       const undecorated = trimmedLine.replace(/^[=\-*#_~\s]+|[=\-*#_~\s]+$/g, '');
 
       let matchedHeader = false;
@@ -171,9 +174,7 @@ export class NlpParserService {
   ): string | null {
     const lines = headerText
       .split('\n')
-      // Two-column layouts glue the right column on after a tab — keep the left cell only
       .map((l) => (l.split('\t')[0] || '').trim())
-      // A section header word that leaked onto the name line ("Rahul Verma Skills") is not part of the name
       .map((l) =>
         l
           .replace(
@@ -211,8 +212,6 @@ export class NlpParserService {
       }
     }
 
-    // Prefer the candidate whose words appear in the email local part — strong
-    // signal it's the person's name and not a title or stray location line
     if (email && candidates.length > 0) {
       const localPart = (email.split('@')[0] || '').toLowerCase();
       const corroborated = candidates.find((c) =>
@@ -283,15 +282,16 @@ export class NlpParserService {
   }
 
   //experience
-  private static calculateExperience(experienceText: string): number {
+  private static calculateExperience(experienceText: string, fullText?: string): number {
     const explicitPatterns = [
       /(\d+)\+?\s*(?:years?|yrs?)\s*(?:of)?\s*experience/i,
       /experience\s*:\s*(\d+)\+?\s*(?:years?|yrs?)/i,
       /(?:total\s*of\s*)?(\d+)\+?\s*(?:years?|yrs?)\s*in/i,
     ];
 
+    const explicitSource = fullText || experienceText;
     for (const pattern of explicitPatterns) {
-      const match = experienceText.match(pattern);
+      const match = explicitSource.match(pattern);
       if (match) {
         const matchedYears = match[1];
         if (matchedYears) {
@@ -301,9 +301,7 @@ export class NlpParserService {
       }
     }
 
-    // Month-aware date ranges: "Jun 2018 - Dec 2020", "January 2021 – Present", "2016 - 2019".
-    // Collected as [startMonthIndex, endMonthIndex) intervals then merged to avoid
-    // double-counting overlapping/concurrent roles.
+    // experience count
     const monthName = '(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*';
     const dateRangePattern = new RegExp(
       `\\b(?:(${monthName})[.,]?\\s+)?(19\\d{2}|20\\d{2})\\s*(?:[-–—~]|to|until)\\s*(?:(?:(${monthName})[.,]?\\s+)?(19\\d{2}|20\\d{2})|(present|current|now|till\\s+date))\\b`,
@@ -330,7 +328,6 @@ export class NlpParserService {
         end = nowMonths;
       } else {
         const endYear = parseInt(endYearStr, 10);
-        // No end month given → assume end of that year so "2016 - 2019" counts 3 full years
         const endMonth = endMonthStr
           ? (MONTH_INDEX[endMonthStr.slice(0, 3).toLowerCase()] ?? 11)
           : 11;
@@ -345,7 +342,6 @@ export class NlpParserService {
 
     if (intervals.length === 0) return 0;
 
-    // Merge overlapping intervals so concurrent roles aren't double-counted
     intervals.sort((a, b) => a[0] - b[0]);
     let totalMonths = 0;
     let [curStart, curEnd] = intervals[0] as [number, number];
@@ -429,7 +425,6 @@ export class NlpParserService {
         flushEntry();
       }
 
-      // A single line can carry both, e.g. "B.Tech Computer Science, KIIT University, 2025"
       if (hasSchoolKeyword) {
         currentSchool = line;
       }

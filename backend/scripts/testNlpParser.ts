@@ -1,5 +1,5 @@
-/* Ad-hoc robustness test for NlpParserService — run: npx tsx scripts/testNlpParser.ts */
 import { NlpParserService } from '../src/services/nlpParser.js';
+import { TextCleanupService } from '../src/services/textCleanup.js';
 
 const samples: Record<string, string> = {
   // 1. Classic clean format
@@ -26,7 +26,6 @@ B.S. in Computer Science, 2016
 SKILLS
 JavaScript, TypeScript, React, Node.js, Python, Django, PostgreSQL, Docker, AWS`,
 
-  // 2. ALL-CAPS name + headers with decorations (common PDF export)
   allCapsDecorated: `PRIYA SHARMA
 =====================================
 Email: priya.sharma@outlook.com
@@ -44,7 +43,6 @@ TCS | Junior Developer | Jun 2018 - Dec 2020
 B.Tech in Information Technology
 National Institute of Technology, Rourkela — 2018`,
 
-  // 3. Two-column PDF extraction (interleaved text, no clean headers)
   twoColumnMangled: `Rahul Verma Skills
 rahul.v@yahoo.co.in React Angular
 9123456780 TypeScript GraphQL
@@ -54,7 +52,6 @@ Flipkart — SDE II (2022 – Present) Education
 Amazon — SDE I (2020 – 2022) M.Tech, IIT Delhi, 2020
 B.Tech, VIT, 2018`,
 
-  // 4. OCR-noisy image resume (tesseract artifacts)
   ocrNoisy: `M a r i a   G o n z a l e z
 maria.gonzalez@ hotmail.com
 Ph0ne: 555 987 6543
@@ -68,7 +65,6 @@ EDUCATlON
 Bachelor of Science ln Computer Science
 State Un1versity 2016`,
 
-  // 5. Name lowercase + contact-first layout, "Curriculum Vitae" title line
   lowercaseNameCvTitle: `Curriculum Vitae
 
 email: alex.chen.dev@proton.me
@@ -86,7 +82,6 @@ Employment History
 Academic Background
 MSc Computer Science, UC Berkeley (2018)`,
 
-  // 6. Minimal / fresher resume, no experience section, skills inline
   fresher: `Ananya Patel
 ananya.patel2024@gmail.com
 +91 8765432109
@@ -99,8 +94,24 @@ Education
 B.Tech Computer Science, KIIT University, expected 2025`,
 };
 
+samples['twoColumnTabbed'] = `Rahul Verma\tSkills
+rahul.v@yahoo.co.in\tReact Angular
+9123456780\tTypeScript GraphQL
+Bengaluru, India\tDocker
+Experience\t
+Flipkart — SDE II (2022 – Present)\tEducation
+Amazon — SDE I (2020 – 2022)\tM.Tech, IIT Delhi, 2020
+\tB.Tech, VIT, 2018
+-- 1 of 1 --`;
+
+const pipelineCleanup: Record<string, (text: string) => string> = {
+  ocrNoisy: (t) => TextCleanupService.cleanOcrText(t),
+  twoColumnTabbed: (t) => TextCleanupService.cleanPdfText(t),
+};
+
 for (const [label, text] of Object.entries(samples)) {
-  const r = NlpParserService.parse(text);
+  const cleaned = pipelineCleanup[label] ? pipelineCleanup[label](text) : text;
+  const r = NlpParserService.parse(cleaned);
   console.log(`\n========== ${label} ==========`);
   console.log(JSON.stringify(r, null, 2));
 }
