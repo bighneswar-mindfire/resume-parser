@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { connectDB } from './config/db.js';
 import uploadRouter from './routes/upload.js';
 import resumesRouter from './routes/resumes.js';
+import insightsRouter from './routes/insights.js';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ import './workers/parserWorker.js';
 
 app.use('/api', uploadRouter);
 app.use('/api', resumesRouter);
+app.use('/api', insightsRouter);
 
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK' });
