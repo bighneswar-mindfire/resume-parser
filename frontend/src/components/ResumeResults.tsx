@@ -17,6 +17,7 @@ export interface ParsedResume {
   skills: string[];
   experience?: number;
   education?: EducationEntry[];
+  matchedRoles?: Array<{ roleName: string; score: number }>;
   createdAt: string;
 }
 
@@ -203,7 +204,7 @@ export default function ResumeResults({ refreshKey, onParsingSettled }: ResumeRe
                               {resume.errorMessage || 'Unknown error'}
                             </div>
                           ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                               <div>
                                 <div className="text-xs font-bold text-gray-500 uppercase mb-2">
                                   All Skills ({resume.skills.length})
@@ -240,6 +241,39 @@ export default function ResumeResults({ refreshKey, onParsingSettled }: ResumeRe
                                         {entry.year && (
                                           <span className="text-gray-400"> ({entry.year})</span>
                                         )}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                              <div>
+                                <div className="text-xs font-bold text-gray-500 uppercase mb-2">
+                                  Role Matches
+                                </div>
+                                {!resume.matchedRoles || resume.matchedRoles.length === 0 ? (
+                                  <span className="text-gray-400">Not scored yet</span>
+                                ) : (
+                                  <ul className="space-y-2">
+                                    {resume.matchedRoles.map((match) => (
+                                      <li key={match.roleName}>
+                                        <div className="flex justify-between text-xs mb-0.5">
+                                          <span className="text-gray-700">{match.roleName}</span>
+                                          <span className="font-semibold text-gray-900">
+                                            {match.score}%
+                                          </span>
+                                        </div>
+                                        <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                          <div
+                                            className={`h-full rounded-full ${
+                                              match.score >= 60
+                                                ? 'bg-green-500'
+                                                : match.score >= 35
+                                                  ? 'bg-amber-400'
+                                                  : 'bg-gray-300'
+                                            }`}
+                                            style={{ width: `${match.score}%` }}
+                                          />
+                                        </div>
                                       </li>
                                     ))}
                                   </ul>
