@@ -2,6 +2,7 @@ import { Worker, Job, QueueOptions } from 'bullmq';
 import { redisConnection } from '../config/redis.js';
 import { Resume } from '../models/Resume.js';
 import { NlpParserService } from '../services/nlpParser.js';
+import { RoleMatcherService } from '../services/roleMatcher.js';
 import { ParserJobData } from '../queues/queueSetup.js';
 
 export const parserWorker = new Worker<ParserJobData>(
@@ -11,6 +12,7 @@ export const parserWorker = new Worker<ParserJobData>(
 
     try {
       const parsedFields = NlpParserService.parse(rawText);
+      const matchedRoles = RoleMatcherService.match(parsedFields, rawText);
 
       await Resume.findByIdAndUpdate(resumeId, {
         status: 'COMPLETED',
@@ -20,6 +22,7 @@ export const parserWorker = new Worker<ParserJobData>(
         skills: parsedFields.skills,
         experience: parsedFields.experience,
         education: parsedFields.education,
+        matchedRoles,
       });
 
       console.log(`[Parser-Worker] Successfully completed parsing for resume ID: ${resumeId}`);
