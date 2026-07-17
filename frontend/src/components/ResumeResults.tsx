@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 
 interface EducationEntry {
   school: string;
@@ -37,9 +37,10 @@ const SKILL_PREVIEW_COUNT = 5;
 
 interface ResumeResultsProps {
   refreshKey: number;
+  onParsingSettled?: () => void;
 }
 
-export default function ResumeResults({ refreshKey }: ResumeResultsProps) {
+export default function ResumeResults({ refreshKey, onParsingSettled }: ResumeResultsProps) {
   const [resumes, setResumes] = useState<ParsedResume[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -81,6 +82,14 @@ export default function ResumeResults({ refreshKey }: ResumeResultsProps) {
     const timer = setInterval(() => void fetchResumes(), POLL_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [hasInFlight, fetchResumes]);
+
+  const wasInFlightRef = useRef(false);
+  useEffect(() => {
+    if (wasInFlightRef.current && !hasInFlight) {
+      onParsingSettled?.();
+    }
+    wasInFlightRef.current = hasInFlight;
+  }, [hasInFlight, onParsingSettled]);
 
   const formatEducation = (education?: EducationEntry[]): string => {
     const first = education?.[0];
