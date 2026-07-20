@@ -1,17 +1,64 @@
 import express, { Request, Response, Router } from 'express';
-import { isValidObjectId } from 'mongoose';
-import { Resume } from '../models/Resume.js';
+import { isValidObjectId, QueryFilter } from 'mongoose';
+import { Resume, IResume } from '../models/Resume.js';
+import { JOB_ROLES } from '../services/roleMatcher.js';
 
 const router: Router = express.Router();
 
+function escapeRegex(value: string): string {
+  return value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
 router.get('/resumes', async (req: Request, res: Response): Promise<Response> => {
   try {
-    const statusFilter = req.query.status as string | undefined;
-    const query: Record<string, unknown> = {};
+    const { status, keyword, location, role, minScore } = req.query as Record<
+      string,
+      string | undefined
+    >;
 
-    if (statusFilter) {
-      query.status = statusFilter.toUpperCase();
+    const conditions: QueryFilter<IResume>[] = [];
+
+    if (status) {
+      conditions.push({ status: status.toUpperCase() as IResume['status'] });
     }
+
+    if (keyword?.trim()) {
+      const pattern = new RegExp(escapeRegex(keyword.trim()), 'i');
+      conditions.push({
+        $or: [{ name: pattern }, { email: pattern }, { skills: pattern }, { rawText: pattern }],
+      });
+    }
+
+    if (location?.trim()) {
+      conditions.push({ rawText: new RegExp(escapeRegex(location.trim()), 'i') });
+    }
+
+    const parsedMinScore = minScore !== undefined ? Number(minScore) : undefined;
+    if (parsedMinScore !== undefined && !Number.isNaN(parsedMinScore)) {
+      if (role?.trim()) {
+        const roleName = role.trim();
+        const knownRole = JOB_ROLES.find((r) => r.name.toLowerCase() === roleName.toLowerCase());
+        if (!knownRole) {
+          return res.status(400).json({
+            error: `Unknown role "${roleName}". Valid roles: ${JOB_ROLES.map((r) => r.name).join(', ')}`,
+          });
+        }
+        conditions.push({
+          matchedRoles: {
+            $elemMatch: { roleName: knownRole.name, score: { $gte: parsedMinScore } },
+          },
+        });
+      } else {
+        conditions.push({ 'matchedRoles.score': { $gte: parsedMinScore } });
+      }
+    } else if (role?.trim()) {
+      // Role without a score threshold: any positive match for that role
+      conditions.push({
+        matchedRoles: { $elemMatch: { roleName: role.trim(), score: { $gt: 0 } } },
+      });
+    }
+
+    const query: QueryFilter<IResume> = conditions.length > 0 ? { $and: conditions } : {};
 
     const resumes = await Resume.find(query, { rawText: 0, filePath: 0 })
       .sort({ createdAt: -1 })
