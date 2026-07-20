@@ -13,6 +13,10 @@ export interface ParserJobData {
   rawText: string;
 }
 
+export interface InsightsJobData {
+  reason: string;
+}
+
 const defaultOptions: QueueOptions = {
   connection: redisConnection as unknown as QueueOptions['connection'],
   defaultJobOptions: {
@@ -28,3 +32,15 @@ const defaultOptions: QueueOptions = {
 
 export const ocrQueue = new Queue<OcrJobData>('ocr-queue', defaultOptions);
 export const parserQueue = new Queue<ParserJobData>('parser-queue', defaultOptions);
+export const insightsQueue = new Queue<InsightsJobData>('insights-queue', defaultOptions);
+
+export async function requestInsightsRefresh(reason: string): Promise<void> {
+  await insightsQueue.add(
+    'recompute-insights',
+    { reason },
+    {
+      delay: 3000,
+      deduplication: { id: 'insights-refresh' },
+    }
+  );
+}

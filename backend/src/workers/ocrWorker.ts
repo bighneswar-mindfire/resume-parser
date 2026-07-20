@@ -5,7 +5,7 @@ import { redisConnection } from '../config/redis.js';
 import { Resume } from '../models/Resume.js';
 import { OcrService } from '../services/ocrService.js';
 import { TextCleanupService } from '../services/textCleanup.js';
-import { parserQueue, OcrJobData } from '../queues/queueSetup.js';
+import { parserQueue, OcrJobData, requestInsightsRefresh } from '../queues/queueSetup.js';
 
 export const ocrWorker = new Worker<OcrJobData>(
   'ocr-queue',
@@ -48,6 +48,8 @@ export const ocrWorker = new Worker<OcrJobData>(
         status: 'FAILED',
         errorMessage,
       });
+
+      await requestInsightsRefresh('ocr-failed');
 
       throw error;
     }

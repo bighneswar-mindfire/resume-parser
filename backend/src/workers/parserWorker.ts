@@ -3,7 +3,7 @@ import { redisConnection } from '../config/redis.js';
 import { Resume } from '../models/Resume.js';
 import { NlpParserService } from '../services/nlpParser.js';
 import { RoleMatcherService } from '../services/roleMatcher.js';
-import { ParserJobData } from '../queues/queueSetup.js';
+import { ParserJobData, requestInsightsRefresh } from '../queues/queueSetup.js';
 
 export const parserWorker = new Worker<ParserJobData>(
   'parser-queue',
@@ -25,6 +25,8 @@ export const parserWorker = new Worker<ParserJobData>(
         matchedRoles,
       });
 
+      await requestInsightsRefresh('resume-completed');
+
       console.log(`[Parser-Worker] Successfully completed parsing for resume ID: ${resumeId}`);
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Parsing failed';
@@ -33,6 +35,8 @@ export const parserWorker = new Worker<ParserJobData>(
         status: 'FAILED',
         errorMessage,
       });
+
+      await requestInsightsRefresh('resume-failed');
 
       throw error;
     }
