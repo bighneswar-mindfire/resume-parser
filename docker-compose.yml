@@ -1,0 +1,50 @@
+services:
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    image: resume-parser-api
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: api
+    ports:
+      - '5000:5000'
+    environment:
+      - PORT=5000
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=${MONGODB_URI}
+      - WORKERS_ENABLED=false
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: resume-parser-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - MONGODB_URI=${MONGODB_URI}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+volumes:
+  redis-data:
+  uploads:

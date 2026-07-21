@@ -14,9 +14,11 @@ app.use(express.json());
 
 connectDB();
 
-import './workers/ocrWorker.js';
-import './workers/parserWorker.js';
-import './workers/insightsWorker.js';
+if (process.env.WORKERS_ENABLED !== 'false') {
+  await import('./workers/ocrWorker.js');
+  await import('./workers/parserWorker.js');
+  await import('./workers/insightsWorker.js');
+}
 
 app.use('/api', uploadRouter);
 app.use('/api', resumesRouter);
