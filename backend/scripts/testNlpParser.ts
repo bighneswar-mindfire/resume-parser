@@ -2,7 +2,6 @@ import { NlpParserService } from '../src/services/nlpParser.js';
 import { TextCleanupService } from '../src/services/textCleanup.js';
 
 const samples: Record<string, string> = {
-  // 1. Classic clean format
   classic: `John Smith
 john.smith@gmail.com | +1 (555) 123-4567
 San Francisco, CA
@@ -112,6 +111,6 @@ const pipelineCleanup: Record<string, (text: string) => string> = {
 for (const [label, text] of Object.entries(samples)) {
   const cleaned = pipelineCleanup[label] ? pipelineCleanup[label](text) : text;
   const r = NlpParserService.parse(cleaned);
-  console.log(`\n========== ${label} ==========`);
+  console.log(`\n${label} `);
   console.log(JSON.stringify(r, null, 2));
 }
