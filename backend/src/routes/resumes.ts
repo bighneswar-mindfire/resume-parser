@@ -52,7 +52,6 @@ router.get('/resumes', async (req: Request, res: Response): Promise<Response> =>
         conditions.push({ 'matchedRoles.score': { $gte: parsedMinScore } });
       }
     } else if (role?.trim()) {
-      // Role without a score threshold: any positive match for that role
       conditions.push({
         matchedRoles: { $elemMatch: { roleName: role.trim(), score: { $gt: 0 } } },
       });

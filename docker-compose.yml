@@ -45,6 +45,17 @@ services:
     deploy:
       replicas: 1
 
+  frontend:
+    image: resume-parser-frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: runtime
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+
 volumes:
   redis-data:
   uploads:
