@@ -150,7 +150,6 @@ export default function UploadDashboard({ onUploadComplete }: UploadDashboardPro
   return (
     <div className="max-w-2xl mx-auto my-10 p-6 bg-white rounded-xl shadow-md border border-gray-100">
       <ErrorAlert messages={errorMessages} onDismiss={dismissError} />
-      <h2 className="text-2xl font-bold text-gray-900">Resume Upload Dashboard</h2>
       <p className="text-sm text-gray-500 mt-1 mb-6">
         Upload multiple resumes (PDF, DOCX, JPEG, PNG)
       </p>

@@ -11,8 +11,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Resume Parser</h1>
-        <p className="app-subtitle">Parsing analytics dashboard</p>
+        <h1 className="text-2xl font-bold text-gray-900">Resume Parser</h1>
       </header>
       <main className="app-main">
         <Dashboard onUploadComplete={() => setRefreshKey((k) => k + 1)} />

@@ -16,7 +16,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "prepare": "node -e \"if (process.env.CI) process.exit(0)\" && husky",
+    "prepare": "node -e \"if (process.env.CI || process.env.VERCEL || process.env.RENDER) process.exit(0); require('node:child_process').execSync('husky', { stdio: 'inherit' });\"",
     "build:backend": "npm ci && npm --workspace backend run build",
     "start:backend": "npm --workspace backend run start",
     "start:worker": "npm --workspace backend run worker"
