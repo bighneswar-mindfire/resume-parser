@@ -1,4 +1,5 @@
 import React, { useState, useRef, DragEvent, ChangeEvent } from 'react';
+import ErrorAlert from './ErrorAlert';
 
 interface FileItem {
   id: string;
@@ -24,7 +25,12 @@ interface UploadDashboardProps {
 export default function UploadDashboard({ onUploadComplete }: UploadDashboardProps) {
   const [fileList, setFileList] = useState<FileItem[]>([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [errorMessages, setErrorMessages] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const dismissError = (index: number) => {
+    setErrorMessages((prev) => prev.filter((_, i) => i !== index));
+  };
 
   const generateId = () => Math.random().toString(36).substring(2, 9);
 
@@ -36,6 +42,7 @@ export default function UploadDashboard({ onUploadComplete }: UploadDashboardPro
 
   const handleFilesAdded = (files: FileList) => {
     const newFiles: FileItem[] = [];
+    const newErrors: string[] = [];
 
     Array.from(files).forEach((file) => {
       if (validateFile(file)) {
@@ -45,9 +52,13 @@ export default function UploadDashboard({ onUploadComplete }: UploadDashboardPro
           status: 'pending',
         });
       } else {
-        alert(`File "${file.name}" is not supported. Please upload PDF, DOCX, or Images.`);
+        newErrors.push(`File "${file.name}" is not supported. Please upload PDF, DOCX, or Images.`);
       }
     });
+
+    if (newErrors.length > 0) {
+      setErrorMessages((prev) => [...prev, ...newErrors]);
+    }
 
     setFileList((prev) => [...prev, ...newFiles]);
   };
@@ -138,6 +149,7 @@ export default function UploadDashboard({ onUploadComplete }: UploadDashboardPro
 
   return (
     <div className="max-w-2xl mx-auto my-10 p-6 bg-white rounded-xl shadow-md border border-gray-100">
+      <ErrorAlert messages={errorMessages} onDismiss={dismissError} />
       <h2 className="text-2xl font-bold text-gray-900">Resume Upload Dashboard</h2>
       <p className="text-sm text-gray-500 mt-1 mb-6">
         Upload multiple resumes (PDF, DOCX, JPEG, PNG)

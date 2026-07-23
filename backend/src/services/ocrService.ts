@@ -15,7 +15,7 @@ export class OcrService {
       console.log('[OCR] Using native tesseract binary.');
     } catch {
       this.nativeAvailable = false;
-      console.log('[OCR] Native tesseract not found — falling back to tesseract.js (WASM).');
+      console.log('[OCR] Native tesseract not found — falling back to tesseract.js.');
     }
     return this.nativeAvailable;
   }
