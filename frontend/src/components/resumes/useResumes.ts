@@ -9,8 +9,25 @@ interface UseResumesOptions {
   onParsingSettled?: () => void;
 }
 
-export function useResumes({ queryString, refreshKey, onParsingSettled }: UseResumesOptions) {
+interface UseResumesResult {
+  resumes: ParsedResume[];
+  total: number;
+  page: number;
+  limit: number;
+  isLoading: boolean;
+  fetchError: string | null;
+  refetch: () => Promise<void>;
+}
+
+export function useResumes({
+  queryString,
+  refreshKey,
+  onParsingSettled,
+}: UseResumesOptions): UseResumesResult {
   const [resumes, setResumes] = useState<ParsedResume[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -25,6 +42,9 @@ export function useResumes({ queryString, refreshKey, onParsingSettled }: UseRes
         const responseData = (await response.json()) as ResumeListResponse;
         if (isCancelled?.()) return;
         setResumes(responseData.data);
+        setTotal(responseData.total ?? responseData.data.length);
+        if (typeof responseData.page === 'number') setPage(responseData.page);
+        if (typeof responseData.limit === 'number') setLimit(responseData.limit);
         setFetchError(null);
       } catch (error: unknown) {
         if (isCancelled?.()) return;
@@ -63,5 +83,5 @@ export function useResumes({ queryString, refreshKey, onParsingSettled }: UseRes
     wasInFlightRef.current = hasInFlight;
   }, [hasInFlight, onParsingSettled]);
 
-  return { resumes, isLoading, fetchError, refetch: fetchResumes };
+  return { resumes, total, page, limit, isLoading, fetchError, refetch: fetchResumes };
 }

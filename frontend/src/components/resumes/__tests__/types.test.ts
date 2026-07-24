@@ -54,4 +54,18 @@ describe('buildQueryString', () => {
     expect(params.get('role')).toBe('Backend Developer');
     expect(params.get('minScore')).toBe('50');
   });
+
+  it('appends page and limit when pagination is supplied', () => {
+    const params = new URLSearchParams(buildQueryString(EMPTY_FILTERS, { page: 2, limit: 25 }));
+    expect(params.get('page')).toBe('2');
+    expect(params.get('limit')).toBe('25');
+  });
+
+  it('combines filters with pagination params', () => {
+    const filters: Filters = { keyword: 'react', location: '', role: '', minScore: '' };
+    const params = new URLSearchParams(buildQueryString(filters, { page: 3, limit: 10 }));
+    expect(params.get('keyword')).toBe('react');
+    expect(params.get('page')).toBe('3');
+    expect(params.get('limit')).toBe('10');
+  });
 });

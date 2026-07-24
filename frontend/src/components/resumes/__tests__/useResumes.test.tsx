@@ -18,7 +18,7 @@ describe('useResumes', () => {
 
   it('fetches resumes and exposes them once loaded', async () => {
     const resumes = [makeResume()];
-    vi.stubGlobal('fetch', mockFetchOnce({ count: 1, data: resumes }));
+    vi.stubGlobal('fetch', mockFetchOnce({ data: resumes, total: 1, page: 1, limit: 20 }));
 
     const { result } = renderHook(() => useResumes({ queryString: '', refreshKey: 0 }));
 
@@ -26,17 +26,33 @@ describe('useResumes', () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.resumes).toEqual(resumes);
+    expect(result.current.total).toBe(1);
+    expect(result.current.page).toBe(1);
+    expect(result.current.limit).toBe(20);
     expect(result.current.fetchError).toBeNull();
   });
 
   it('requests the correct URL including the query string', async () => {
-    const fetchMock = mockFetchOnce({ count: 0, data: [] });
+    const fetchMock = mockFetchOnce({ data: [], total: 0, page: 1, limit: 20 });
     vi.stubGlobal('fetch', fetchMock);
 
     renderHook(() => useResumes({ queryString: '?role=Backend%20Developer', refreshKey: 0 }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith('/api/resumes?role=Backend%20Developer');
+  });
+
+  it('exposes pagination metadata from the server response', async () => {
+    vi.stubGlobal('fetch', mockFetchOnce({ data: [], total: 123, page: 3, limit: 50 }));
+
+    const { result } = renderHook(() =>
+      useResumes({ queryString: '?page=3&limit=50', refreshKey: 0 })
+    );
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.total).toBe(123);
+    expect(result.current.page).toBe(3);
+    expect(result.current.limit).toBe(50);
   });
 
   it('sets an error message when the response is not ok', async () => {
@@ -59,7 +75,12 @@ describe('useResumes', () => {
   it('polls again while a resume is still in flight', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ count: 1, data: [makeResume({ status: 'PROCESSING' })] }),
+      json: async () => ({
+        data: [makeResume({ status: 'PROCESSING' })],
+        total: 1,
+        page: 1,
+        limit: 20,
+      }),
     } as Response);
     vi.stubGlobal('fetch', fetchMock);
 
@@ -79,8 +100,10 @@ describe('useResumes', () => {
         ({
           ok: true,
           json: async () => ({
-            count: 1,
             data: [makeResume({ status: inFlight ? 'PROCESSING' : 'COMPLETED' })],
+            total: 1,
+            page: 1,
+            limit: 20,
           }),
         }) as Response
     );
