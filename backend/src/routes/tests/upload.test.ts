@@ -7,31 +7,22 @@ const { savedDocs, addToQueue } = vi.hoisted(() => ({
   addToQueue: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('../../models/Resume.js', () => {
-  class ResumeMock {
-    _id: string;
-    fileName: string;
-    filePath: string;
-    status: string;
-    constructor(input: { fileName: string; filePath: string; status: string }) {
-      this._id = `resume-${savedDocs.length + 1}`;
-      this.fileName = input.fileName;
-      this.filePath = input.filePath;
-      this.status = input.status;
-    }
-    async save() {
-      const doc = {
-        _id: this._id,
-        fileName: this.fileName,
-        filePath: this.filePath,
-        status: this.status,
-      };
-      savedDocs.push(doc);
-      return { ...doc, _id: { toString: () => doc._id } };
-    }
-  }
-  return { Resume: ResumeMock };
-});
+vi.mock('../../repositories/resumeRepository.js', () => ({
+  ResumeRepository: {
+    create: vi
+      .fn()
+      .mockImplementation((input: { fileName: string; filePath: string; status: string }) => {
+        const doc = {
+          _id: `resume-${savedDocs.length + 1}`,
+          fileName: input.fileName,
+          filePath: input.filePath,
+          status: input.status,
+        };
+        savedDocs.push(doc);
+        return Promise.resolve({ ...doc, _id: { toString: () => doc._id } });
+      }),
+  },
+}));
 
 vi.mock('../../queues/queueSetup.js', () => ({
   ocrQueue: { add: addToQueue },
@@ -83,11 +74,9 @@ describe('POST /api/upload', () => {
     expect(res.body.message).toMatch(/successfully uploaded/i);
     expect(res.body.data).toHaveLength(1);
 
-    // Placeholder row was saved with status PENDING.
     expect(savedDocs).toHaveLength(1);
     expect(savedDocs[0]).toMatchObject({ fileName: 'jane.pdf', status: 'PENDING' });
 
-    // OCR job was queued with matching metadata.
     expect(addToQueue).toHaveBeenCalledTimes(1);
     const [jobName, jobData] = addToQueue.mock.calls[0]!;
     expect(jobName).toBe('extract-text');

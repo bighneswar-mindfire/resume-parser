@@ -1,5 +1,4 @@
-import { Resume } from '../models/Resume.js';
-import { InsightsSummary, IInsightsSummary } from '../models/InsightsSummary.js';
+import { InsightsRepository } from '../repositories/insightsRepository.js';
 import { JOB_ROLES } from './roleMatcher.js';
 
 export interface InsightsPayload {
@@ -32,12 +31,9 @@ function normalizeSchool(school: string): string {
 export class InsightsService {
   public static async compute(): Promise<InsightsPayload> {
     const [totalResumes, failedResumes, completed] = await Promise.all([
-      Resume.countDocuments(),
-      Resume.countDocuments({ status: 'FAILED' }),
-      Resume.find(
-        { status: 'COMPLETED' },
-        { skills: 1, experience: 1, education: 1, matchedRoles: 1 }
-      ).lean(),
+      InsightsRepository.countTotal(),
+      InsightsRepository.countFailed(),
+      InsightsRepository.findCompleted(),
     ]);
 
     const skillCounts = new Map<string, number>();
@@ -113,18 +109,15 @@ export class InsightsService {
 
   public static async computeAndStore(): Promise<InsightsPayload> {
     const payload = await this.compute();
-    await InsightsSummary.findOneAndUpdate(
-      { key: 'global' },
-      { ...payload, computedAt: new Date(payload.computedAt) },
-      { upsert: true }
-    );
+    await InsightsRepository.upsertSnapshot({
+      ...payload,
+      computedAt: new Date(payload.computedAt),
+    });
     return payload;
   }
 
   public static async getSnapshot(): Promise<InsightsPayload> {
-    const stored = (await InsightsSummary.findOne({
-      key: 'global',
-    }).lean()) as IInsightsSummary | null;
+    const stored = await InsightsRepository.getSnapshot();
 
     if (!stored) {
       return this.computeAndStore();

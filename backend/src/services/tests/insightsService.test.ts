@@ -1,35 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../../models/Resume.js', () => ({
-  Resume: {
-    countDocuments: vi.fn(),
-    find: vi.fn(),
-  },
-}));
-
-vi.mock('../../models/InsightsSummary.js', () => ({
-  InsightsSummary: {
-    findOne: vi.fn(),
-    findOneAndUpdate: vi.fn(),
+vi.mock('../../repositories/insightsRepository.js', () => ({
+  InsightsRepository: {
+    countTotal: vi.fn(),
+    countFailed: vi.fn(),
+    findCompleted: vi.fn(),
+    getSnapshot: vi.fn(),
+    upsertSnapshot: vi.fn(),
   },
 }));
 
 import { InsightsService } from '../insightsService.js';
-import { Resume } from '../../models/Resume.js';
-import { InsightsSummary } from '../../models/InsightsSummary.js';
+import { InsightsRepository } from '../../repositories/insightsRepository.js';
 
-const ResumeMock = Resume as unknown as {
-  countDocuments: ReturnType<typeof vi.fn>;
-  find: ReturnType<typeof vi.fn>;
+const RepoMock = InsightsRepository as unknown as {
+  countTotal: ReturnType<typeof vi.fn>;
+  countFailed: ReturnType<typeof vi.fn>;
+  findCompleted: ReturnType<typeof vi.fn>;
+  getSnapshot: ReturnType<typeof vi.fn>;
+  upsertSnapshot: ReturnType<typeof vi.fn>;
 };
-const InsightsSummaryMock = InsightsSummary as unknown as {
-  findOne: ReturnType<typeof vi.fn>;
-  findOneAndUpdate: ReturnType<typeof vi.fn>;
-};
-
-function leanReturning<T>(value: T) {
-  return { lean: vi.fn().mockResolvedValue(value) };
-}
 
 const COMPLETED_RESUMES = [
   {
@@ -61,10 +51,9 @@ const COMPLETED_RESUMES = [
 describe('InsightsService.compute', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    ResumeMock.countDocuments
-      .mockResolvedValueOnce(5) // total
-      .mockResolvedValueOnce(1); // failed
-    ResumeMock.find.mockReturnValue(leanReturning(COMPLETED_RESUMES));
+    RepoMock.countTotal.mockResolvedValue(5);
+    RepoMock.countFailed.mockResolvedValue(1);
+    RepoMock.findCompleted.mockResolvedValue(COMPLETED_RESUMES);
   });
 
   it('aggregates the top-level counts', async () => {
@@ -76,7 +65,6 @@ describe('InsightsService.compute', () => {
 
   it('averages experience across completed resumes to one decimal', async () => {
     const payload = await InsightsService.compute();
-    // (3 + 7 + 10) / 3 = 6.666… → 6.7
     expect(payload.avgExperience).toBeCloseTo(6.7, 1);
   });
 
@@ -85,7 +73,6 @@ describe('InsightsService.compute', () => {
     const react = payload.topSkills.find((s) => s.skill === 'react');
     expect(react?.count).toBe(2);
     expect(payload.topSkills.length).toBeLessThanOrEqual(10);
-    // Sorted descending.
     for (let i = 1; i < payload.topSkills.length; i++) {
       expect(payload.topSkills[i - 1]!.count).toBeGreaterThanOrEqual(payload.topSkills[i]!.count);
     }
@@ -101,25 +88,22 @@ describe('InsightsService.compute', () => {
   });
 
   it('normalises university names and drops the placeholder', async () => {
-    ResumeMock.countDocuments.mockReset();
-    ResumeMock.countDocuments.mockResolvedValueOnce(2).mockResolvedValueOnce(0);
-    ResumeMock.find.mockReturnValue(
-      leanReturning([
-        {
-          skills: [],
-          experience: 1,
-          education: [{ school: 'Stanford University - 2018', degree: 'X', year: 2018 }],
-          matchedRoles: [],
-        },
-        {
-          skills: [],
-          experience: 1,
-
-          education: [{ school: 'Mentioned Institution', degree: 'X', year: null }],
-          matchedRoles: [],
-        },
-      ])
-    );
+    RepoMock.countTotal.mockResolvedValue(2);
+    RepoMock.countFailed.mockResolvedValue(0);
+    RepoMock.findCompleted.mockResolvedValue([
+      {
+        skills: [],
+        experience: 1,
+        education: [{ school: 'Stanford University - 2018', degree: 'X', year: 2018 }],
+        matchedRoles: [],
+      },
+      {
+        skills: [],
+        experience: 1,
+        education: [{ school: 'Mentioned Institution', degree: 'X', year: null }],
+        matchedRoles: [],
+      },
+    ]);
 
     const payload = await InsightsService.compute();
     expect(payload.topUniversities).toEqual([{ school: 'Stanford University', count: 1 }]);
@@ -136,9 +120,9 @@ describe('InsightsService.compute', () => {
   });
 
   it('returns zeros when there are no completed resumes', async () => {
-    ResumeMock.countDocuments.mockReset();
-    ResumeMock.countDocuments.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
-    ResumeMock.find.mockReturnValue(leanReturning([]));
+    RepoMock.countTotal.mockResolvedValue(0);
+    RepoMock.countFailed.mockResolvedValue(0);
+    RepoMock.findCompleted.mockResolvedValue([]);
 
     const payload = await InsightsService.compute();
     expect(payload.avgExperience).toBe(0);
@@ -173,28 +157,27 @@ describe('InsightsService.getSnapshot', () => {
       roleScores: [{ roleName: 'Frontend Developer', avgScore: 65, strongMatches: 20 }],
       computedAt: new Date('2024-06-01T12:00:00Z'),
     };
-    InsightsSummaryMock.findOne.mockReturnValue(leanReturning(stored));
+    RepoMock.getSnapshot.mockResolvedValue(stored);
 
     const payload = await InsightsService.getSnapshot();
 
     expect(payload.totalResumes).toBe(42);
     expect(payload.computedAt).toBe('2024-06-01T12:00:00.000Z');
-    expect(ResumeMock.countDocuments).not.toHaveBeenCalled();
+    expect(RepoMock.countTotal).not.toHaveBeenCalled();
   });
 
   it('falls back to computeAndStore when nothing is cached yet', async () => {
-    InsightsSummaryMock.findOne.mockReturnValue(leanReturning(null));
-    InsightsSummaryMock.findOneAndUpdate.mockResolvedValue(undefined);
-    ResumeMock.countDocuments.mockResolvedValueOnce(0).mockResolvedValueOnce(0);
-    ResumeMock.find.mockReturnValue(leanReturning([]));
+    RepoMock.getSnapshot.mockResolvedValue(null);
+    RepoMock.upsertSnapshot.mockResolvedValue(undefined);
+    RepoMock.countTotal.mockResolvedValue(0);
+    RepoMock.countFailed.mockResolvedValue(0);
+    RepoMock.findCompleted.mockResolvedValue([]);
 
     const payload = await InsightsService.getSnapshot();
 
     expect(payload.completedResumes).toBe(0);
-    expect(InsightsSummaryMock.findOneAndUpdate).toHaveBeenCalledTimes(1);
-    const [filter, update, options] = InsightsSummaryMock.findOneAndUpdate.mock.calls[0]!;
-    expect(filter).toEqual({ key: 'global' });
+    expect(RepoMock.upsertSnapshot).toHaveBeenCalledTimes(1);
+    const [update] = RepoMock.upsertSnapshot.mock.calls[0]!;
     expect(update.computedAt).toBeInstanceOf(Date);
-    expect(options).toEqual({ upsert: true });
   });
 });
