@@ -4,7 +4,6 @@ import request from 'supertest';
 import { SignJWT } from 'jose';
 import { requireAuth, __resetAuthSecretCache } from '../authMiddleware.js';
 
-// Test-only HMAC secret used to sign fixture JWTs in this suite. Not a real credential.
 const SECRET = 'test-secret-that-is-long-enough-for-hs256'; // gitleaks:allow
 
 async function makeToken(
