@@ -8,13 +8,21 @@ import {
 export const ResumeController = {
   async getResumes(req: Request, res: Response): Promise<Response> {
     try {
-      const { status, keyword, location, role, minScore } = req.query as Record<
+      const { status, keyword, location, role, minScore, page, limit } = req.query as Record<
         string,
         string | undefined
       >;
 
-      const resumes = await ResumeService.list({ status, keyword, location, role, minScore });
-      return res.status(200).json({ count: resumes.length, data: resumes });
+      const result = await ResumeService.list({
+        status,
+        keyword,
+        location,
+        role,
+        minScore,
+        page,
+        limit,
+      });
+      return res.status(200).json(result);
     } catch (error: unknown) {
       if (error instanceof UnknownRoleError) {
         return res.status(400).json({ error: error.message });

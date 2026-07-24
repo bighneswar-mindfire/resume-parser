@@ -9,12 +9,24 @@ export interface ResumeFilter {
   minScore?: number;
 }
 
+export interface ResumePagination {
+  page: number;
+  limit: number;
+}
+
+export interface PaginatedResumes<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 function escapeRegex(value: string): string {
   return value.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
 export const ResumeRepository = {
-  async findMany(filter: ResumeFilter) {
+  async findMany(filter: ResumeFilter, pagination: ResumePagination) {
     const conditions: QueryFilter<IResume>[] = [];
 
     if (filter.status) {
@@ -49,10 +61,23 @@ export const ResumeRepository = {
     }
 
     const query: QueryFilter<IResume> = conditions.length > 0 ? { $and: conditions } : {};
-    return Resume.find(query, { rawText: 0, filePath: 0 })
-      .sort({ createdAt: -1 })
-      .limit(200)
-      .lean();
+    const skip = (pagination.page - 1) * pagination.limit;
+
+    const [data, total] = await Promise.all([
+      Resume.find(query, { rawText: 0, filePath: 0 })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(pagination.limit)
+        .lean(),
+      Resume.countDocuments(query),
+    ]);
+
+    return {
+      data,
+      total,
+      page: pagination.page,
+      limit: pagination.limit,
+    };
   },
 
   async findById(id: string) {

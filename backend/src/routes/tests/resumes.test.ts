@@ -29,18 +29,20 @@ describe('GET /api/resumes', () => {
     vi.clearAllMocks();
   });
 
-  it('returns { count, data } with no filters applied', async () => {
+  it('returns { data, total, page, limit } with default pagination applied', async () => {
     const rows = [{ _id: '1', fileName: 'a.pdf' }];
-    RepoMock.findMany.mockResolvedValue(rows);
+    RepoMock.findMany.mockResolvedValue({ data: rows, total: 1, page: 1, limit: 20 });
 
     const res = await request(buildApp()).get('/api/resumes');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ count: 1, data: rows });
+    expect(res.body).toEqual({ data: rows, total: 1, page: 1, limit: 20 });
+    const [, pagination] = RepoMock.findMany.mock.calls[0]!;
+    expect(pagination).toEqual({ page: 1, limit: 20 });
   });
 
   it('upper-cases the status query parameter before querying', async () => {
-    RepoMock.findMany.mockResolvedValue([]);
+    RepoMock.findMany.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 });
 
     await request(buildApp()).get('/api/resumes?status=completed');
 
@@ -49,7 +51,7 @@ describe('GET /api/resumes', () => {
   });
 
   it('passes keyword to the repository', async () => {
-    RepoMock.findMany.mockResolvedValue([]);
+    RepoMock.findMany.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 });
 
     await request(buildApp()).get('/api/resumes?keyword=react');
 
@@ -66,7 +68,7 @@ describe('GET /api/resumes', () => {
   });
 
   it('accepts a known role + minScore and calls the repository', async () => {
-    RepoMock.findMany.mockResolvedValue([]);
+    RepoMock.findMany.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 });
 
     const res = await request(buildApp()).get('/api/resumes?role=Frontend%20Developer&minScore=60');
 
@@ -77,13 +79,33 @@ describe('GET /api/resumes', () => {
   });
 
   it('accepts a role without a score threshold', async () => {
-    RepoMock.findMany.mockResolvedValue([]);
+    RepoMock.findMany.mockResolvedValue({ data: [], total: 0, page: 1, limit: 20 });
 
     await request(buildApp()).get('/api/resumes?role=Backend%20Developer');
 
     const [filter] = RepoMock.findMany.mock.calls[0]!;
     expect(filter.role).toBe('Backend Developer');
     expect(filter.minScore).toBeUndefined();
+  });
+
+  it('forwards page and limit query params to the repository', async () => {
+    RepoMock.findMany.mockResolvedValue({ data: [], total: 0, page: 3, limit: 50 });
+
+    const res = await request(buildApp()).get('/api/resumes?page=3&limit=50');
+
+    expect(res.status).toBe(200);
+    const [, pagination] = RepoMock.findMany.mock.calls[0]!;
+    expect(pagination).toEqual({ page: 3, limit: 50 });
+    expect(res.body).toEqual({ data: [], total: 0, page: 3, limit: 50 });
+  });
+
+  it('clamps limit to a safe maximum and falls back to defaults for invalid values', async () => {
+    RepoMock.findMany.mockResolvedValue({ data: [], total: 0, page: 1, limit: 100 });
+
+    await request(buildApp()).get('/api/resumes?page=-1&limit=9999');
+
+    const [, pagination] = RepoMock.findMany.mock.calls[0]!;
+    expect(pagination).toEqual({ page: 1, limit: 100 });
   });
 
   it('returns a 500 with a helpful error when the repository throws', async () => {
