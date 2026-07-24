@@ -1,14 +1,34 @@
 import express, { Request, Response, NextFunction, Router } from 'express';
 import multer from 'multer';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+
 import upload from '../config/multer.js';
 import { Resume } from '../models/Resume.js';
 import { ocrQueue } from '../queues/queueSetup.js';
 
 const router: Router = express.Router();
 
+const uploadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const authedUser = (req as Request & { user?: { sub?: string } }).user?.sub;
+    if (authedUser) return authedUser;
+    return ipKeyGenerator(req.ip ?? 'unknown');
+  },
+
+  message: {
+    error: 'Too many upload requests from this client. Please try again later.',
+  },
+});
+
 router.post(
   '/upload',
+  uploadLimiter,
   upload.array('resumes', 10),
+
   async (req: Request, res: Response): Promise<Response | void> => {
     try {
       const files = req.files as Express.Multer.File[] | undefined;

@@ -5,6 +5,7 @@ import { connectDB } from './config/db.js';
 import uploadRouter from './routes/upload.js';
 import resumesRouter from './routes/resumes.js';
 import insightsRouter from './routes/insights.js';
+import { requireAuth } from './middleware/authMiddleware.js';
 
 dotenv.config();
 
@@ -39,13 +40,18 @@ if (process.env.WORKERS_ENABLED !== 'false') {
   await import('./workers/insightsWorker.js');
 }
 
-app.use('/api', uploadRouter);
-app.use('/api', resumesRouter);
-app.use('/api', insightsRouter);
-
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({ status: 'OK' });
 });
+
+const auth = requireAuth({
+  issuer: process.env.JWT_ISSUER,
+  audience: process.env.JWT_AUDIENCE,
+});
+
+app.use('/api', auth, uploadRouter);
+app.use('/api', auth, resumesRouter);
+app.use('/api', auth, insightsRouter);
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
